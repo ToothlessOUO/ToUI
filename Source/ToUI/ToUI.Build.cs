@@ -38,6 +38,10 @@ public class ToUI : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
+				"Projects",
+				"EditorStyle",
+				"DeveloperSettings",
+				"UnrealEd",
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
