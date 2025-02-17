@@ -34,6 +34,7 @@ public class ToUI : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
+				"Projects",
 				"CoreUObject",
 				"Engine",
 				"Slate",
@@ -42,6 +43,10 @@ public class ToUI : ModuleRules
 				"EditorStyle",
 				"DeveloperSettings",
 				"UnrealEd",
+				"GraphEditor",
+				"ToolMenus",
+				"InputCore",
+				
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

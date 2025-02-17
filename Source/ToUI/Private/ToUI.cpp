@@ -1,18 +1,43 @@
 #include "ToUI.h"
+
+#include "ShaderCompiler.h"
 #include "Styling/SlateStyleMacros.h"
 #include "Interfaces/IPluginManager.h"
 #include "ToUIEditorStyleSetting.h"
+#include "Kismet/KismetMaterialLibrary.h"
+#include "Kismet/KismetMathLibrary.h"
 #include "Settings/EditorStyleSettings.h"
+#include "Subsystems/UnrealEditorSubsystem.h"
+#include "Materials/MaterialParameterCollection.h"
 
+class UUnrealEditorSubsystem;
 DEFINE_LOG_CATEGORY(LogToUI);
 
 #define LOCTEXT_NAMESPACE "FToUIModule"
 #define RootToContentDir Style->RootToContentDir
 
+#pragma region Input
+
+bool FToUIInputProcessor::HandleMouseButtonDownEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent)
+{
+	bIsDragging = MouseEvent.IsMouseButtonDown(EKeys::RightMouseButton);
+	return false;
+}
+
+bool FToUIInputProcessor::HandleMouseButtonUpEvent(FSlateApplication& SlateApp, const FPointerEvent& MouseEvent)
+{
+	bIsDragging = false;
+	return false;
+}
+
+#pragma endregion
+
 void FToUIModule::StartupModule()
 {
 	TickDelegate = FTickerDelegate::CreateRaw(this, &FToUIModule::Tick);
-
+	TickDelegateHandle = FTSTicker::GetCoreTicker().AddTicker(TickDelegate);
+	ToUIInputProcessor = new FToUIInputProcessor();
+	FSlateApplication::Get().RegisterInputPreProcessor(MakeShareable(ToUIInputProcessor));
 	if (GIsEditor && !IsRunningCommandlet())
 	{
 		ApplyFlatNodeEditorStyle();
@@ -22,6 +47,11 @@ void FToUIModule::StartupModule()
 
 void FToUIModule::ShutdownModule()
 {
+	FTSTicker::GetCoreTicker().RemoveTicker(TickDelegateHandle);
+	if (FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().UnregisterInputPreProcessor(MakeShareable(ToUIInputProcessor));
+	}
 }
 
 UToUIEditorStyleSetting* FToUIModule::GetEditorSettings()
@@ -55,6 +85,7 @@ void FToUIModule::ApplyFlatNodeEditorStyle()
 
 	UToUIEditorStyleSetting* FlatNodesSettings = GetMutableDefault<UToUIEditorStyleSetting>();
 	//const bool bHeaderUseGradient = FlatNodesSettings->bHeaderUseGradient;
+
 
 	Style->Set("Graph.PlayInEditor", new BOX_BRUSH("Graph/RegularNode_shadow_selected", FMargin(18.0f / 64.0f)));
 
@@ -106,6 +137,14 @@ void FToUIModule::ApplyFlatNodeEditorStyle()
 void FToUIModule::ApplyMatrixBackgroundEditorStyle()
 {
 	const auto Settings = GetEditorSettings();
+	const auto EditorStyleSetting = GetMutableDefault<UEditorStyleSettings>();
+	
+	if (!Settings->bUseMatrixBackground)
+	{
+		EditorStyleSetting->bUseGrid = true;
+		EditorStyleSetting->GraphBackgroundBrush = FSlateBrush();
+		return;
+	}
 	UMaterialInterface* Material;
 	if (Settings->MatrixBackgroundMat.IsValid())
 	{
@@ -117,24 +156,74 @@ void FToUIModule::ApplyMatrixBackgroundEditorStyle()
 		Material = LoadObject<UMaterialInterface>(nullptr, *Path_MatrixBackgroundDefault);
 		if (Material == nullptr) return;
 	}
-	const auto EditorStyleSetting = GetMutableDefault<UEditorStyleSettings>();
 	FSlateBrush Brush;
 	Brush.SetResourceObject(Material);
 	EditorStyleSetting->GraphBackgroundBrush = Brush;
+	EditorStyleSetting->bUseGrid = false;
 	EditorStyleSetting->SaveConfig();
 }
 
-void FToUIModule::UpdateDragOffset()
+TObjectPtr<UMaterialParameterCollection> FToUIModule::GetMatrixBackgroundMPC()
 {
+	if (MPC_MatrixBackground == nullptr)
+	{
+		MPC_MatrixBackground = LoadObject<UMaterialParameterCollection>(nullptr, *Path_MatrixBackgroundMPC);
+	}
+	return MPC_MatrixBackground;
 }
 
+void FToUIModule::UpdateDragOffset(const float DeltaTime)
+{
+	if (GEditor->bIsSimulatingInEditor || GEditor->PlayWorld) return;
+	const auto Window = FSlateApplication::Get().GetActiveTopLevelRegularWindow();
+	if (!Window) return;
+	const auto EditorSys = GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>();
+	if (ToUIInputProcessor->bIsDragging)
+	{
+		auto CursorPos = FSlateApplication::Get().GetCursorPos();
+		auto LastCursorPos = FSlateApplication::Get().GetLastCursorPos();
+		auto WindowSize = Window->GetSizeInScreen();
+		auto WindowPos = Window->GetPositionInScreen();
+
+		CursorPos.X = UKismetMathLibrary::MapRangeClamped(CursorPos.X, WindowPos.X, WindowPos.X + WindowSize.X, 0.0, 1.0);
+		CursorPos.Y = UKismetMathLibrary::MapRangeClamped(CursorPos.Y, WindowPos.Y, WindowPos.Y + WindowSize.Y, 0.0, 1.0);
+		LastCursorPos.X = UKismetMathLibrary::MapRangeClamped(LastCursorPos.X, WindowPos.X, WindowPos.X + WindowSize.X, 0.0, 1.0);
+		LastCursorPos.Y = UKismetMathLibrary::MapRangeClamped(LastCursorPos.Y, WindowPos.Y, WindowPos.Y + WindowSize.Y, 0.0, 1.0);
+		
+		DragOffset += WindowSize * (CursorPos - LastCursorPos) * GetEditorSettings()->DragOffsetScale;
+		LastCursorPos = CursorPos;
+		UKismetMaterialLibrary::SetVectorParameterValue(
+			EditorSys->GetEditorWorld(),
+			GetMatrixBackgroundMPC(),
+			K_DragAndOffset,
+			FLinearColor(DragOffset.X, DragOffset.Y, 0, 0));
+
+		if (FMath::IsNearlyEqual(CursorEffectStrength,0)) return;
+		CursorEffectStrength = FMath::Lerp(CursorEffectStrength, 0, 0.1f);
+		UKismetMaterialLibrary::SetScalarParameterValue(
+			EditorSys->GetEditorWorld(),
+			GetMatrixBackgroundMPC(),
+			K_CursorEffectStrength,
+			CursorEffectStrength);
+	}
+	else
+	{
+		if (FMath::IsNearlyEqual(CursorEffectStrength, 1.f)) return;
+		CursorEffectStrength = FMath::Lerp(CursorEffectStrength, 1, 0.1f);
+		UKismetMaterialLibrary::SetScalarParameterValue(
+			EditorSys->GetEditorWorld(),
+			GetMatrixBackgroundMPC(),
+			K_CursorEffectStrength,
+			CursorEffectStrength);
+	}
+}
 
 #pragma endregion
 
 
 bool FToUIModule::Tick(float DeltaTime)
 {
-	UpdateDragOffset();
+	UpdateDragOffset(DeltaTime);
 	return true;
 }
 

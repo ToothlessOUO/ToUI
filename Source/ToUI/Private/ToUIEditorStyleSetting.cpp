@@ -36,7 +36,8 @@ void UToUIEditorStyleSetting::PostEditChangeProperty(struct FPropertyChangedEven
 		}
 		const FName PropertyName = PropertyChangedEvent.GetPropertyName();	
 		
-		if (PropertyName == GET_MEMBER_NAME_CHECKED(UToUIEditorStyleSetting, MatrixBackgroundMat))
+		if (PropertyName == GET_MEMBER_NAME_CHECKED(UToUIEditorStyleSetting, MatrixBackgroundMat) ||
+			PropertyName == GET_MEMBER_NAME_CHECKED(UToUIEditorStyleSetting, bUseMatrixBackground))
 		{
 			ToUIModule->ApplyMatrixBackgroundEditorStyle();
 		}
