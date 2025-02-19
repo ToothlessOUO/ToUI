@@ -1,15 +1,11 @@
 #include "ToUI.h"
 
-#include "BlueprintEditor.h"
-#include "MaterialEditorUtilities.h"
 #include "Styling/SlateStyleMacros.h"
 #include "Interfaces/IPluginManager.h"
 #include "ToUIEditorStyleSetting.h"
-#include "Editor/MaterialEditor/Private/MaterialEditor.h"
 #include "Kismet/KismetMaterialLibrary.h"
 #include "Settings/EditorStyleSettings.h"
 #include "Subsystems/UnrealEditorSubsystem.h"
-#include "Materials/MaterialParameterCollection.h"
 
 class UUnrealEditorSubsystem;
 DEFINE_LOG_CATEGORY(LogToUI);
@@ -122,10 +118,10 @@ void FToUIModule::ApplyFlatNodeEditorStyle()
 	Style->Set("Graph.CollapsedNode.Body", new BOX_BRUSH("Graph/RegularNode_body", FMargin(16.f / 64.f, 25.f / 64.f, 16.f / 64.f, 16.f / 64.f)));
 	Style->Set("Graph.CollapsedNode.BodyColorSpill", new BOX_BRUSH("Graph/CollapsedNode_Body_ColorSpill", FMargin(16.f / 64.f, 25.f / 64.f, 16.f / 64.f, 16.f / 64.f)));
 
-	Style->Set("Graph.ExecPin.Connected", new IMAGE_BRUSH("Old/Graph/ExecPin_Connected", FVector2D(12.0f, 16.0f)));
-	Style->Set("Graph.ExecPin.Disconnected", new IMAGE_BRUSH("Old/Graph/ExecPin_Disconnected", FVector2D(12.0f, 16.0f)));
-	Style->Set("Graph.ExecPin.ConnectedHovered", new IMAGE_BRUSH("Old/Graph/ExecPin_Connected", FVector2D(12.0f, 16.0f), FLinearColor(0.8f, 0.8f, 0.8f)));
-	Style->Set("Graph.ExecPin.DisconnectedHovered", new IMAGE_BRUSH("Old/Graph/ExecPin_Disconnected", FVector2D(12.0f, 16.0f), FLinearColor(0.8f, 0.8f, 0.8f)));
+	Style->Set("Graph.ExecPin.Connected", new IMAGE_BRUSH("Graph/ExecPin_Connected", FVector2D(12.0f, 16.0f)));
+	Style->Set("Graph.ExecPin.Disconnected", new IMAGE_BRUSH("Graph/ExecPin_Disconnected", FVector2D(12.0f, 16.0f)));
+	Style->Set("Graph.ExecPin.ConnectedHovered", new IMAGE_BRUSH("Graph/ExecPin_Connected", FVector2D(12.0f, 16.0f), FLinearColor(0.8f, 0.8f, 0.8f)));
+	Style->Set("Graph.ExecPin.DisconnectedHovered", new IMAGE_BRUSH("Graph/ExecPin_Disconnected", FVector2D(12.0f, 16.0f), FLinearColor(0.8f, 0.8f, 0.8f)));
 
 	Style->Set("KismetExpression.ReadVariable.Body", new BOX_BRUSH("/Graph/Linear_VarNode_Background", FMargin(16.f / 64.f, 12.f / 28.f)));
 	//Style->Set("KismetExpression.ReadVariable.Gloss", new BOX_BRUSH("/Graph/Linear_VarNode_Gloss", FMargin(16.f / 64.f, 12.f / 28.f)));
@@ -145,6 +141,9 @@ void FToUIModule::ApplyFlatNodeEditorStyle()
 
 void FToUIModule::ApplyMatrixBackgroundEditorStyle()
 {
+	if (MatrixBackgroundMat) return;
+	if (!GEditor || !GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>())	return;
+	
 	const auto Settings = GetEditorSettings();
 	const auto EditorStyleSetting = GetMutableDefault<UEditorStyleSettings>();
 
@@ -165,20 +164,12 @@ void FToUIModule::ApplyMatrixBackgroundEditorStyle()
 		Material = LoadObject<UMaterialInterface>(nullptr, *Path_MatrixBackgroundDefault);
 		if (Material == nullptr) return;
 	}
+	const auto EditorSys = GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>();
+	MatrixBackgroundMat = UKismetMaterialLibrary::CreateDynamicMaterialInstance(EditorSys->GetEditorWorld(),Material);
 	FSlateBrush Brush;
-	Brush.SetResourceObject(Material);
+	Brush.SetResourceObject(MatrixBackgroundMat);
 	EditorStyleSetting->GraphBackgroundBrush = Brush;
 	EditorStyleSetting->bUseGrid = false;
-	EditorStyleSetting->SaveConfig();
-}
-
-TObjectPtr<UMaterialParameterCollection> FToUIModule::GetMatrixBackgroundMPC()
-{
-	if (MPC_MatrixBackground == nullptr)
-	{
-		MPC_MatrixBackground = LoadObject<UMaterialParameterCollection>(nullptr, *Path_MatrixBackgroundMPC);
-	}
-	return MPC_MatrixBackground;
 }
 
 bool FToUIModule::GetCurrentGraphInfo()
@@ -186,11 +177,12 @@ bool FToUIModule::GetCurrentGraphInfo()
 	const auto TabManager = FGlobalTabmanager::Get();
 	const auto ActiveTab = TabManager->GetActiveTab();
 	if (!ActiveTab.IsValid() || !ActiveTab->IsForeground()) return false;
-	
+
 	TSharedRef<SGraphEditor> GraphEditor = StaticCastSharedRef<SGraphEditor>(ActiveTab->GetContent());
 	if (GraphEditor->GetType() != TEXT("SGraphEditor")) return false;
-	
+
 	GraphEditor->GetViewLocation(GraphPosDragCur, GraphZoom);
+	//tolog("Pos : " + GraphPosDragCur.ToString() + " Zoom : " + FString::SanitizeFloat(GraphZoom));
 
 	if (GraphPosDragStart.Equals(FVector2D::ZeroVector))
 	{
@@ -200,54 +192,45 @@ bool FToUIModule::GetCurrentGraphInfo()
 	return true;
 }
 
+void FToUIModule::SetMatrixBackgroundMatParams()
+{
+	MatrixBackgroundMat->SetVectorParameterValue(K_MatrixBackgroundMat_Params, FLinearColor(DragOffset.X,DragOffset.Y,GraphZoom,CursorEffectStrength));
+}
+
 void FToUIModule::UpdateDragOffset(const float DeltaTime)
 {
-	if (GEditor->bIsSimulatingInEditor || GEditor->PlayWorld) return;
-	const auto EditorSys = GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>();
+	if (GEditor->bIsSimulatingInEditor || GEditor->PlayWorld || !MatrixBackgroundMat) return;
 	if (ToUIInputProcessor->bIsDragging)
 	{
 		if (!GetCurrentGraphInfo()) return;
-		const auto DragOffset = (GraphPosDragStart - GraphPosDragCur) * GraphZoom;
-
-		auto Cur = FLinearColor(DragOffset.X, DragOffset.Y, 0, 0);
-		auto Last = UKismetMaterialLibrary::GetVectorParameterValue(
-			EditorSys->GetEditorWorld(),
-			GetMatrixBackgroundMPC(),
-			K_DragAndOffset);
+		const auto CurDragOffset = (GraphPosDragCur - GraphPosDragStart)
+			* GraphZoom * UToUIEditorStyleSetting::ConvScale(GetEditorSettings()->DragOffsetScale);
 
 		if (DragWarningTimer < DragWarningDuration)
 		{
 			DragWarningTimer += DeltaTime;
-			Cur = FMath::Lerp(Last, Cur, 0.3f);
+			DragOffset = FMath::Lerp(DragOffset, CurDragOffset, 0.4f);
+		}else
+		{
+			DragOffset = CurDragOffset;
 		}
-		//适应UI像素偏移
-		Cur = FLinearColor((int)Cur.R, (int)Cur.G, Cur.B, Cur.A);
-		UKismetMaterialLibrary::SetVectorParameterValue(
-			EditorSys->GetEditorWorld(),
-			GetMatrixBackgroundMPC(),
-			K_DragAndOffset,
-			Cur);
-
-		if (FMath::IsNearlyEqual(CursorEffectStrength, 0)) return;
-		CursorEffectStrength = FMath::Lerp(CursorEffectStrength, 0, 0.1f);
-		UKismetMaterialLibrary::SetScalarParameterValue(
-			EditorSys->GetEditorWorld(),
-			GetMatrixBackgroundMPC(),
-			K_CursorEffectStrength,
-			CursorEffectStrength);
+		
+		if (!FMath::IsNearlyEqual(CursorEffectStrength, 0))
+		{
+			CursorEffectStrength = FMath::Lerp(CursorEffectStrength, 0, 0.1f);
+		}
+		
+		SetMatrixBackgroundMatParams();
 	}
 	else
 	{
-		GraphPosDragStart = FVector2D::ZeroVector;
-		DragWarningTimer = 0;
-
-		if (FMath::IsNearlyEqual(CursorEffectStrength, 1.f)) return;
-		CursorEffectStrength = FMath::Lerp(CursorEffectStrength, 1, 0.1f);
-		UKismetMaterialLibrary::SetScalarParameterValue(
-			EditorSys->GetEditorWorld(),
-			GetMatrixBackgroundMPC(),
-			K_CursorEffectStrength,
-			CursorEffectStrength);
+		if (!FMath::IsNearlyEqual(CursorEffectStrength, 1.f))
+		{
+			GraphPosDragStart = FVector2D::ZeroVector;
+			DragWarningTimer = 0;
+			CursorEffectStrength = FMath::Lerp(CursorEffectStrength, 1, 0.1f);
+			SetMatrixBackgroundMatParams();
+		}
 	}
 }
 
@@ -256,6 +239,7 @@ void FToUIModule::UpdateDragOffset(const float DeltaTime)
 
 bool FToUIModule::Tick(float DeltaTime)
 {
+	ApplyMatrixBackgroundEditorStyle();
 	UpdateDragOffset(DeltaTime);
 	return true;
 }

@@ -5,6 +5,15 @@
 #include "Engine/DeveloperSettings.h"
 #include "ToUIEditorStyleSetting.generated.h"
 
+UENUM(BlueprintType)
+enum class EToUIOffsetScale : uint8
+{
+	XP5 UMETA(DisplayName = "x0.5"),
+	X1 UMETA(DisplayName = "x1"),
+	X1P5 UMETA(DisplayName = "x1.5"),
+	X2 UMETA(DisplayName = "x2"),
+};
+
 UCLASS(config = EditorPerProjectUserSettings)
 class TOUI_API UToUIEditorStyleSetting : public UDeveloperSettings
 {
@@ -12,6 +21,8 @@ class TOUI_API UToUIEditorStyleSetting : public UDeveloperSettings
 
 	public:
 	UToUIEditorStyleSetting();
+	
+	static float ConvScale(EToUIOffsetScale Scale);
 
 #if WITH_EDITOR
 	virtual FText GetSectionText() const override;
@@ -19,12 +30,16 @@ class TOUI_API UToUIEditorStyleSetting : public UDeveloperSettings
 	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
 #endif
 
-	UPROPERTY(config, EditAnywhere, Category = "Header", DisplayName = "MatrixBackgroundMat", meta = (ConfigRestartRequired = true))
-	TSoftObjectPtr<UMaterialInterface> MatrixBackgroundMat;
-	UPROPERTY(config, EditAnywhere, Category = "Header", DisplayName = "UseMatrixBackgroundMat", meta = (ConfigRestartRequired = true))
+	//Setings
+	UPROPERTY(config, EditAnywhere, Category = "MatrixBackground", DisplayName = "UseMatrixBackgroundMat", meta = (ConfigRestartRequired = true))
 	bool bUseMatrixBackground = true;
-	UPROPERTY(config, EditAnywhere, Category = "Header", DisplayName = "DragOffsetScale", meta = (ConfigRestartRequired = true))
-	float DragOffsetScale = 1.888888f;
+	UPROPERTY(config, EditAnywhere, Category = "MatrixBackground", DisplayName = "MatrixBackgroundMat", meta = (ConfigRestartRequired = true))
+	TSoftObjectPtr<UMaterialInterface> MatrixBackgroundMat;
+	/**
+	 * 如果你的电脑屏幕价值昂贵，自带超分辨率，需要设置系数来保证拖拽时背景网格和节点的相对位置不变
+	 */
+	UPROPERTY(config, EditAnywhere, Category = "MatrixBackground", DisplayName = "DragOffsetScale", meta = (ConfigRestartRequired = true))
+	EToUIOffsetScale DragOffsetScale = EToUIOffsetScale::X1;
 
 	private:
 	FToUIModule* ToUIModule;
