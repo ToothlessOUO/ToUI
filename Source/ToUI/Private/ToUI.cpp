@@ -186,9 +186,9 @@ bool FToUIModule::GetCurrentGraphInfo()
 	const auto TabManager = FGlobalTabmanager::Get();
 	const auto ActiveTab = TabManager->GetActiveTab();
 	if (!ActiveTab.IsValid() || !ActiveTab->IsForeground()) return false;
-
-	//tolog(ActiveTab->GetTypeAsString());
+	
 	TSharedRef<SGraphEditor> GraphEditor = StaticCastSharedRef<SGraphEditor>(ActiveTab->GetContent());
+	if (GraphEditor->GetType() != TEXT("SGraphEditor")) return false;
 	
 	GraphEditor->GetViewLocation(GraphPosDragCur, GraphZoom);
 
@@ -208,7 +208,7 @@ void FToUIModule::UpdateDragOffset(const float DeltaTime)
 	{
 		if (!GetCurrentGraphInfo()) return;
 		const auto DragOffset = (GraphPosDragStart - GraphPosDragCur) * GraphZoom;
-		
+
 		auto Cur = FLinearColor(DragOffset.X, DragOffset.Y, 0, 0);
 		auto Last = UKismetMaterialLibrary::GetVectorParameterValue(
 			EditorSys->GetEditorWorld(),
