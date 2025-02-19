@@ -43,9 +43,11 @@ public class ToUI : ModuleRules
 				"EditorStyle",
 				"DeveloperSettings",
 				"UnrealEd",
+				"MaterialEditor",
 				"GraphEditor",
 				"ToolMenus",
 				"InputCore",
+				"Kismet",
 				
 				// ... add private dependencies that you statically link with here ...	
 			}

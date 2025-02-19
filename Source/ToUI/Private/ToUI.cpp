@@ -1,11 +1,12 @@
 #include "ToUI.h"
 
-#include "ShaderCompiler.h"
+#include "BlueprintEditor.h"
+#include "MaterialEditorUtilities.h"
 #include "Styling/SlateStyleMacros.h"
 #include "Interfaces/IPluginManager.h"
 #include "ToUIEditorStyleSetting.h"
+#include "Editor/MaterialEditor/Private/MaterialEditor.h"
 #include "Kismet/KismetMaterialLibrary.h"
-#include "Kismet/KismetMathLibrary.h"
 #include "Settings/EditorStyleSettings.h"
 #include "Subsystems/UnrealEditorSubsystem.h"
 #include "Materials/MaterialParameterCollection.h"
@@ -32,6 +33,7 @@ bool FToUIInputProcessor::HandleMouseButtonUpEvent(FSlateApplication& SlateApp, 
 
 #pragma endregion
 
+#pragma region MouduleFuncs
 void FToUIModule::StartupModule()
 {
 	TickDelegate = FTickerDelegate::CreateRaw(this, &FToUIModule::Tick);
@@ -58,6 +60,13 @@ UToUIEditorStyleSetting* FToUIModule::GetEditorSettings()
 {
 	return GetMutableDefault<UToUIEditorStyleSetting>();
 }
+
+void FToUIModule::tolog(FString msg)
+{
+	TOLOG("%s", *msg);
+}
+
+#pragma endregion
 
 #pragma region FlatNode
 
@@ -138,7 +147,7 @@ void FToUIModule::ApplyMatrixBackgroundEditorStyle()
 {
 	const auto Settings = GetEditorSettings();
 	const auto EditorStyleSetting = GetMutableDefault<UEditorStyleSettings>();
-	
+
 	if (!Settings->bUseMatrixBackground)
 	{
 		EditorStyleSetting->bUseGrid = true;
@@ -172,33 +181,54 @@ TObjectPtr<UMaterialParameterCollection> FToUIModule::GetMatrixBackgroundMPC()
 	return MPC_MatrixBackground;
 }
 
+bool FToUIModule::GetCurrentGraphInfo()
+{
+	const auto TabManager = FGlobalTabmanager::Get();
+	const auto ActiveTab = TabManager->GetActiveTab();
+	if (!ActiveTab.IsValid() || !ActiveTab->IsForeground()) return false;
+
+	//tolog(ActiveTab->GetTypeAsString());
+	TSharedRef<SGraphEditor> GraphEditor = StaticCastSharedRef<SGraphEditor>(ActiveTab->GetContent());
+	
+	GraphEditor->GetViewLocation(GraphPosDragCur, GraphZoom);
+
+	if (GraphPosDragStart.Equals(FVector2D::ZeroVector))
+	{
+		GraphPosDragStart = GraphPosDragCur;
+	}
+
+	return true;
+}
+
 void FToUIModule::UpdateDragOffset(const float DeltaTime)
 {
 	if (GEditor->bIsSimulatingInEditor || GEditor->PlayWorld) return;
-	const auto Window = FSlateApplication::Get().GetActiveTopLevelRegularWindow();
-	if (!Window) return;
 	const auto EditorSys = GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>();
 	if (ToUIInputProcessor->bIsDragging)
 	{
-		auto CursorPos = FSlateApplication::Get().GetCursorPos();
-		auto LastCursorPos = FSlateApplication::Get().GetLastCursorPos();
-		auto WindowSize = Window->GetSizeInScreen();
-		auto WindowPos = Window->GetPositionInScreen();
-
-		CursorPos.X = UKismetMathLibrary::MapRangeClamped(CursorPos.X, WindowPos.X, WindowPos.X + WindowSize.X, 0.0, 1.0);
-		CursorPos.Y = UKismetMathLibrary::MapRangeClamped(CursorPos.Y, WindowPos.Y, WindowPos.Y + WindowSize.Y, 0.0, 1.0);
-		LastCursorPos.X = UKismetMathLibrary::MapRangeClamped(LastCursorPos.X, WindowPos.X, WindowPos.X + WindowSize.X, 0.0, 1.0);
-		LastCursorPos.Y = UKismetMathLibrary::MapRangeClamped(LastCursorPos.Y, WindowPos.Y, WindowPos.Y + WindowSize.Y, 0.0, 1.0);
+		if (!GetCurrentGraphInfo()) return;
+		const auto DragOffset = (GraphPosDragStart - GraphPosDragCur) * GraphZoom;
 		
-		DragOffset += WindowSize * (CursorPos - LastCursorPos) * GetEditorSettings()->DragOffsetScale;
-		LastCursorPos = CursorPos;
+		auto Cur = FLinearColor(DragOffset.X, DragOffset.Y, 0, 0);
+		auto Last = UKismetMaterialLibrary::GetVectorParameterValue(
+			EditorSys->GetEditorWorld(),
+			GetMatrixBackgroundMPC(),
+			K_DragAndOffset);
+
+		if (DragWarningTimer < DragWarningDuration)
+		{
+			DragWarningTimer += DeltaTime;
+			Cur = FMath::Lerp(Last, Cur, 0.3f);
+		}
+		//适应UI像素偏移
+		Cur = FLinearColor((int)Cur.R, (int)Cur.G, Cur.B, Cur.A);
 		UKismetMaterialLibrary::SetVectorParameterValue(
 			EditorSys->GetEditorWorld(),
 			GetMatrixBackgroundMPC(),
 			K_DragAndOffset,
-			FLinearColor(DragOffset.X, DragOffset.Y, 0, 0));
+			Cur);
 
-		if (FMath::IsNearlyEqual(CursorEffectStrength,0)) return;
+		if (FMath::IsNearlyEqual(CursorEffectStrength, 0)) return;
 		CursorEffectStrength = FMath::Lerp(CursorEffectStrength, 0, 0.1f);
 		UKismetMaterialLibrary::SetScalarParameterValue(
 			EditorSys->GetEditorWorld(),
@@ -208,6 +238,9 @@ void FToUIModule::UpdateDragOffset(const float DeltaTime)
 	}
 	else
 	{
+		GraphPosDragStart = FVector2D::ZeroVector;
+		DragWarningTimer = 0;
+
 		if (FMath::IsNearlyEqual(CursorEffectStrength, 1.f)) return;
 		CursorEffectStrength = FMath::Lerp(CursorEffectStrength, 1, 0.1f);
 		UKismetMaterialLibrary::SetScalarParameterValue(
