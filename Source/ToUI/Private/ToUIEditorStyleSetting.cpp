@@ -21,6 +21,8 @@ float UToUIEditorStyleSetting::ConvScale(EToUIOffsetScale Scale)
 {
 	switch (Scale)
 	{
+	case EToUIOffsetScale::XP5:
+		return 0.5f;
 	default:
 	case EToUIOffsetScale::X1:
 		return 1.f;
@@ -28,7 +30,6 @@ float UToUIEditorStyleSetting::ConvScale(EToUIOffsetScale Scale)
 		return 1.5f;
 	case EToUIOffsetScale::X2:
 		return 2.f;
-		
 	}
 }
 
@@ -54,7 +55,7 @@ void UToUIEditorStyleSetting::PostEditChangeProperty(struct FPropertyChangedEven
 		if (PropertyName == GET_MEMBER_NAME_CHECKED(UToUIEditorStyleSetting, MatrixBackgroundMat) ||
 			PropertyName == GET_MEMBER_NAME_CHECKED(UToUIEditorStyleSetting, bUseMatrixBackground))
 		{
-			ToUIModule->ApplyMatrixBackgroundEditorStyle();
+			ToUIModule->ApplyMatrixBackgroundEditorStyle(true);
 		}
 	}
 }

@@ -36,7 +36,7 @@ class TOUI_API UToUIEditorStyleSetting : public UDeveloperSettings
 	UPROPERTY(config, EditAnywhere, Category = "MatrixBackground", DisplayName = "MatrixBackgroundMat", meta = (ConfigRestartRequired = true))
 	TSoftObjectPtr<UMaterialInterface> MatrixBackgroundMat;
 	/**
-	 * 如果你的电脑屏幕价值昂贵，自带超分辨率，需要设置系数来保证拖拽时背景网格和节点的相对位置不变
+	 * 和分辨率有关，1080p设置为 x0.5 ; 2k设置为 x1 ; 4k设置为 x1.5
 	 */
 	UPROPERTY(config, EditAnywhere, Category = "MatrixBackground", DisplayName = "DragOffsetScale", meta = (ConfigRestartRequired = true))
 	EToUIOffsetScale DragOffsetScale = EToUIOffsetScale::X1;

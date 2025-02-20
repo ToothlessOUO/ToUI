@@ -62,26 +62,40 @@ void FToUIModule::tolog(FString msg)
 	TOLOG("%s", *msg);
 }
 
-#pragma endregion
+UMaterial* FToUIModule::LoadMat(FString Path)
+{
+	return LoadObject<UMaterial>(nullptr, *Path);
+}
 
-#pragma region FlatNode
-
-FSlateBrush* FToUIModule::CreateHeaderBrush()
+FSlateBrush* FToUIModule::CreateBrush(const EFlatBrush Type)
 {
 	FSlateBrush* SlateBrush = new FSlateBrush();
-
-	UMaterial* Material = LoadObject<UMaterial>(nullptr, *Path_FlatNodeHeaderMat);
+	UMaterial* Material;
+	switch (Type)
+	{
+	case EFlatBrush::HeaderBrush:
+		Material = LoadMat(Path_FlatNodeHeaderMat);
+		break;
+	case EFlatBrush::SelectedRimBrush_VarNode:
+	case EFlatBrush::SelectedRimBrush:
+		Material = LoadMat(Path_FlatNodeSelectedRim);
+		break;
+	default:
+		Material = nullptr;
+	}
+	if (!Material) return nullptr;
 	UToUIEditorStyleSetting* FlatNodesSettings = GetEditorSettings();
 	UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(Material, FlatNodesSettings);
-
-	//DynamicMaterial->SetVectorParameterValue("Color", FVector(HeaderBrightness, HeaderBrightness, HeaderBrightness));
 	DynamicMaterial->AddToRoot();
-
 	SlateBrush->SetResourceObject(DynamicMaterial);
-	SlateBrushes.Add("HeaderBrush", SlateBrush);
+	SlateBrushes.Add(Type, SlateBrush);
 
 	return SlateBrush;
 }
+
+#pragma endregion
+
+#pragma region FlatNode
 
 void FToUIModule::ApplyFlatNodeEditorStyle()
 {
@@ -97,7 +111,8 @@ void FToUIModule::ApplyFlatNodeEditorStyle()
 	Style->Set("Graph.Node.Body", new BOX_BRUSH("Graph/RegularNode_body", FMargin(16.f / 64.f, 25.f / 64.f, 16.f / 64.f, 16.f / 64.f)));
 	Style->Set("Graph.Node.TintedBody", new BOX_BRUSH("Graph/TintedNode_body", FMargin(16.f / 64.f, 25.f / 64.f, 16.f / 64.f, 16.f / 64.f)));
 	Style->Set("Graph.Node.TitleGloss", new BOX_BRUSH("Graph/RegularNode_title_gloss", FMargin(12.0f / 64.0f)));
-	FSlateBrush* HeaderBrush = CreateHeaderBrush();
+
+	const auto HeaderBrush = CreateBrush(EFlatBrush::HeaderBrush);
 	HeaderBrush->Margin = FMargin(0, -1.0f / 32.0f, -3.0f / 20.0f, 0);
 	HeaderBrush->DrawAs = ESlateBrushDrawType::Box;
 	Style->Set("Graph.Node.ColorSpill", HeaderBrush);
@@ -105,6 +120,7 @@ void FToUIModule::ApplyFlatNodeEditorStyle()
 	Style->Set("Graph.Node.TitleHighlight", new BOX_BRUSH("Graph/RegularNode_title_highlight", FMargin(16.0f / 64.0f, 1.0f, 16.0f / 64.0f, 0.0f)));
 
 	Style->Set("Graph.Node.ShadowSize", FVector2D(12, 12));
+
 	Style->Set("Graph.Node.ShadowSelected", new BOX_BRUSH("Graph/RegularNode_shadow_selected", FMargin(18.0f / 64.0f)));
 	Style->Set("Graph.Node.Shadow", new BOX_BRUSH("Graph/RegularNode_shadow", FMargin(18.0f / 64.0f)));
 
@@ -139,11 +155,11 @@ void FToUIModule::ApplyFlatNodeEditorStyle()
 
 #pragma region MatrixBackground
 
-void FToUIModule::ApplyMatrixBackgroundEditorStyle()
+void FToUIModule::ApplyMatrixBackgroundEditorStyle(bool bForceUpdate)
 {
-	if (MatrixBackgroundMat) return;
-	if (!GEditor || !GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>())	return;
-	
+	if (MatrixBackgroundMat && !bForceUpdate) return;
+	if (!GEditor || !GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>()) return;
+
 	const auto Settings = GetEditorSettings();
 	const auto EditorStyleSetting = GetMutableDefault<UEditorStyleSettings>();
 
@@ -165,7 +181,7 @@ void FToUIModule::ApplyMatrixBackgroundEditorStyle()
 		if (Material == nullptr) return;
 	}
 	const auto EditorSys = GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>();
-	MatrixBackgroundMat = UKismetMaterialLibrary::CreateDynamicMaterialInstance(EditorSys->GetEditorWorld(),Material);
+	MatrixBackgroundMat = UKismetMaterialLibrary::CreateDynamicMaterialInstance(EditorSys->GetEditorWorld(), Material);
 	FSlateBrush Brush;
 	Brush.SetResourceObject(MatrixBackgroundMat);
 	EditorStyleSetting->GraphBackgroundBrush = Brush;
@@ -194,33 +210,30 @@ bool FToUIModule::GetCurrentGraphInfo()
 
 void FToUIModule::SetMatrixBackgroundMatParams()
 {
-	MatrixBackgroundMat->SetVectorParameterValue(K_MatrixBackgroundMat_Params, FLinearColor(DragOffset.X,DragOffset.Y,GraphZoom,CursorEffectStrength));
+	MatrixBackgroundMat->SetVectorParameterValue(K_MatrixBackgroundMat_Params, FLinearColor(DragOffset.X, DragOffset.Y, GraphZoom, CursorEffectStrength));
 }
 
 void FToUIModule::UpdateDragOffset(const float DeltaTime)
 {
-	if (GEditor->bIsSimulatingInEditor || GEditor->PlayWorld || !MatrixBackgroundMat) return;
+	if (GEditor->bIsSimulatingInEditor || GEditor->PlayWorld || !MatrixBackgroundMat || !GetCurrentGraphInfo()) return;
 	if (ToUIInputProcessor->bIsDragging)
 	{
-		if (!GetCurrentGraphInfo()) return;
-		const auto CurDragOffset = (GraphPosDragCur - GraphPosDragStart)
-			* GraphZoom * UToUIEditorStyleSetting::ConvScale(GetEditorSettings()->DragOffsetScale);
+		const auto CurDragOffset = (GraphPosDragCur - GraphPosDragStart) * GraphZoom * UToUIEditorStyleSetting::ConvScale(GetEditorSettings()->DragOffsetScale);
 
 		if (DragWarningTimer < DragWarningDuration)
 		{
 			DragWarningTimer += DeltaTime;
 			DragOffset = FMath::Lerp(DragOffset, CurDragOffset, 0.4f);
-		}else
+		}
+		else
 		{
 			DragOffset = CurDragOffset;
 		}
-		
+
 		if (!FMath::IsNearlyEqual(CursorEffectStrength, 0))
 		{
 			CursorEffectStrength = FMath::Lerp(CursorEffectStrength, 0, 0.1f);
 		}
-		
-		SetMatrixBackgroundMatParams();
 	}
 	else
 	{
@@ -229,9 +242,9 @@ void FToUIModule::UpdateDragOffset(const float DeltaTime)
 			GraphPosDragStart = FVector2D::ZeroVector;
 			DragWarningTimer = 0;
 			CursorEffectStrength = FMath::Lerp(CursorEffectStrength, 1, 0.1f);
-			SetMatrixBackgroundMatParams();
 		}
 	}
+	SetMatrixBackgroundMatParams();
 }
 
 #pragma endregion
