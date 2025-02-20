@@ -1,0 +1,9 @@
+{
+	"RemapUnityFiles": 
+	{
+		"Module.ToUI.cpp.obj": [
+			"PerModuleInline.gen.cpp.obj",
+			"ToUI.cpp.obj"
+		]
+	}
+}

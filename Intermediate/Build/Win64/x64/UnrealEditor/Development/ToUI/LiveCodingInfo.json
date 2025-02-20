@@ -1,0 +1,12 @@
+{
+	"RemapUnityFiles": 
+	{
+		"Module.ToUI.cpp.obj": [
+			"ToUI.init.gen.cpp.obj",
+			"ToUIEditorStyleSetting.gen.cpp.obj",
+			"PerModuleInline.gen.cpp.obj",
+			"ToUI.cpp.obj",
+			"ToUIEditorStyleSetting.cpp.obj"
+		]
+	}
+}

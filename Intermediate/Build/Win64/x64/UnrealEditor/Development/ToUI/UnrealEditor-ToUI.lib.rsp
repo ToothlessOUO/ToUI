@@ -1,0 +1,12 @@
+/NOLOGO
+/errorReport:prompt
+/MACHINE:x64
+/SUBSYSTEM:WINDOWS
+/DEF
+/NAME:"UnrealEditor-ToUI.dll"
+/IGNORE:4221
+/NODEFAULTLIB
+"..\Intermediate\Build\Win64\x64\UnrealEditor\Development\UnrealEd\SharedPCH.UnrealEd.Project.ValApi.Cpp20.h.obj"
+"D:\0_Depots\PluginDemo\Plugins\ToUI\Intermediate\Build\Win64\x64\UnrealEditor\Development\ToUI\Module.ToUI.cpp.obj"
+"..\Intermediate\Build\Win64\x64\UnrealEditor\Development\Default.rc2.res"
+/OUT:"D:\0_Depots\PluginDemo\Plugins\ToUI\Intermediate\Build\Win64\x64\UnrealEditor\Development\ToUI\UnrealEditor-ToUI.lib"
