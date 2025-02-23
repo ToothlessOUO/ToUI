@@ -180,8 +180,7 @@ void FToUIModule::ApplyMatrixBackgroundEditorStyle(bool bForceUpdate)
 		Material = LoadObject<UMaterialInterface>(nullptr, *Path_MatrixBackgroundDefault);
 		if (Material == nullptr) return;
 	}
-	const auto EditorSys = GEditor->GetEditorSubsystem<UUnrealEditorSubsystem>();
-	MatrixBackgroundMat = UKismetMaterialLibrary::CreateDynamicMaterialInstance(EditorSys->GetEditorWorld(), Material);
+	MatrixBackgroundMat = UKismetMaterialLibrary::CreateDynamicMaterialInstance(nullptr, Material);
 	FSlateBrush Brush;
 	Brush.SetResourceObject(MatrixBackgroundMat);
 	EditorStyleSetting->GraphBackgroundBrush = Brush;
@@ -248,7 +247,6 @@ void FToUIModule::UpdateDragOffset(const float DeltaTime)
 }
 
 #pragma endregion
-
 
 bool FToUIModule::Tick(float DeltaTime)
 {
